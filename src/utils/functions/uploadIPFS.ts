@@ -9,8 +9,7 @@ function getPinataInstance(apiKey?: string): PinataSDK {
     return new PinataSDK({ pinataJwt: jwt })
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function uploadJSONToIPFS(jsonMetadata: Record<string, any>, apiKey?: string): Promise<string> {
+export async function uploadJSONToIPFS(jsonMetadata: Record<string, unknown>, apiKey?: string): Promise<string> {
     try {
         const pinata = getPinataInstance(apiKey)
         console.log('Uploading JSON to IPFS...')

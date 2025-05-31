@@ -12,6 +12,7 @@ export interface IPMetadata {
     creator: string
     contentHash?: string
     contentUrl?: string
+    [key: string]: any 
 }
 
 export interface RegisterIPResult {
