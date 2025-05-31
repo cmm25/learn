@@ -55,7 +55,7 @@ export async function uploadAndRegisterIP(
         }
         
         console.log('Uploading metadata to IPFS...')
-        const metadataHash = await uploadJSONToIPFS(fullMetadata, pinataApiKey)
+        const metadataHash = await uploadJSONToIPFS(fullMetadata as Record<string, unknown>, pinataApiKey)
         const metadataUrl = `https://gateway.pinata.cloud/ipfs/${metadataHash}`
         
         // Convert IPFS hash to bytes32 format
@@ -156,7 +156,7 @@ export async function registerExistingNFTAsIP(
         
         // Upload metadata to IPFS
         console.log('Uploading metadata to IPFS...')
-        const metadataHash = await uploadJSONToIPFS(metadata)
+        const metadataHash = await uploadJSONToIPFS(metadata as Record<string, unknown>)
         const metadataUrl = `https://gateway.pinata.cloud/ipfs/${metadataHash}`
         
         // Register the NFT as an IP Asset
