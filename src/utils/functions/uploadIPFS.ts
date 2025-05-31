@@ -1,12 +1,17 @@
 import { PinataSDK } from "pinata-web3"
 
-// Initialize Pinata with API key from environment
-const pinata = new PinataSDK({
-    pinataJwt: process.env.NEXT_PUBLIC_PINATA_API_KEY || process.env.PINATA_API_KEY
-});
+// Function to get Pinata instance with the provided API key or fallback to env
+function getPinataInstance(apiKey?: string): PinataSDK {
+    const jwt = apiKey || process.env.NEXT_PUBLIC_PINATA_API_KEY || process.env.PINATA_API_KEY
+    if (!jwt) {
+        throw new Error('Pinata API key is required. Please provide it or set NEXT_PUBLIC_PINATA_API_KEY in environment.')
+    }
+    return new PinataSDK({ pinataJwt: jwt })
+}
 
-export async function uploadJSONToIPFS(jsonMetadata: Record<string, unknown>): Promise<string> {
+export async function uploadJSONToIPFS(jsonMetadata: Record<string, unknown>, apiKey?: string): Promise<string> {
     try {
+        const pinata = getPinataInstance(apiKey)
         console.log('Uploading JSON to IPFS...')
         const { IpfsHash } = await pinata.upload.json(jsonMetadata)
         console.log('JSON uploaded successfully:', IpfsHash)
@@ -20,8 +25,9 @@ export async function uploadJSONToIPFS(jsonMetadata: Record<string, unknown>): P
     }
 }
 
-export async function uploadFileToIPFS(file: File): Promise<string> {
+export async function uploadFileToIPFS(file: File, apiKey?: string): Promise<string> {
     try {
+        const pinata = getPinataInstance(apiKey)
         console.log('Uploading file to IPFS:', file.name, file.type, file.size)
         const { IpfsHash } = await pinata.upload.file(file)
         console.log('File uploaded successfully:', IpfsHash)

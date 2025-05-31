@@ -33,14 +33,15 @@ export interface RegisterIPResult {
 export async function uploadAndRegisterIP(
     file: File,
     metadata: IPMetadata,
-    recipientAddress: Address
+    recipientAddress: Address,
+    pinataApiKey?: string
 ): Promise<RegisterIPResult> {
     try {
         const client = getStoryClient()
         
         // Step 1: Upload file to IPFS
         console.log('Uploading file to IPFS...')
-        const fileHash = await uploadFileToIPFS(file)
+        const fileHash = await uploadFileToIPFS(file, pinataApiKey)
         const fileUrl = `https://gateway.pinata.cloud/ipfs/${fileHash}`
         
         // Step 2: Create and upload metadata to IPFS
@@ -54,7 +55,7 @@ export async function uploadAndRegisterIP(
         }
         
         console.log('Uploading metadata to IPFS...')
-        const metadataHash = await uploadJSONToIPFS(fullMetadata)
+        const metadataHash = await uploadJSONToIPFS(fullMetadata, pinataApiKey)
         const metadataUrl = `https://gateway.pinata.cloud/ipfs/${metadataHash}`
         
         // Convert IPFS hash to bytes32 format

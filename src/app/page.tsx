@@ -30,6 +30,7 @@ declare global {
 interface FormData {
   walletAddress: string
   privateKey: string
+  pinataApiKey: string
   file: File | null
   filePreview: string
   title: string
@@ -42,6 +43,7 @@ export default function MultiStepForm() {
   const [formData, setFormData] = useState<FormData>({
     walletAddress: "",
     privateKey: "",
+    pinataApiKey: "",
     file: null,
     filePreview: "",
     title: "",
@@ -196,7 +198,8 @@ export default function MultiStepForm() {
         const result = await uploadAndRegisterIP(
           formData.file,
           metadata,
-          storyAccount.address as Address
+          storyAccount.address as Address,
+          formData.pinataApiKey
         )
         
         if (result.success) {
@@ -247,6 +250,7 @@ export default function MultiStepForm() {
     setFormData({
       walletAddress: "",
       privateKey: "",
+      pinataApiKey: "",
       file: null,
       filePreview: "",
       title: "",
@@ -331,7 +335,7 @@ export default function MultiStepForm() {
                 </div>
               )}
 
-              {/* Private Key Input */}
+              {/* Private Key and Pinata API Key Input */}
               {connectionMethod === "privatekey" && !formData.walletAddress && (
                 <div className="space-y-4">
                   <div>
@@ -348,6 +352,31 @@ export default function MultiStepForm() {
                     />
                     <p className="text-xs text-gray-500 mt-1">
                       Your private key will be used to sign Story Protocol transactions
+                    </p>
+                  </div>
+                  
+                  <div>
+                    <Label htmlFor="pinataApiKey" className="text-gray-700 font-medium">
+                      Pinata JWT
+                    </Label>
+                    <Input
+                      id="pinataApiKey"
+                      type="password"
+                      placeholder="Enter your Pinata JWT token"
+                      value={formData.pinataApiKey}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, pinataApiKey: e.target.value }))}
+                      className="mt-1 bg-white border-gray-200"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Your Pinata JWT token for IPFS storage. Get one at{" "}
+                      <a 
+                        href="https://pinata.cloud" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:underline"
+                      >
+                        pinata.cloud
+                      </a>
                     </p>
                   </div>
                 </div>
@@ -367,7 +396,7 @@ export default function MultiStepForm() {
               {connectionMethod && !formData.walletAddress && (
                 <Button
                   onClick={connectWallet}
-                  disabled={isConnecting || (connectionMethod === "privatekey" && !formData.privateKey)}
+                  disabled={isConnecting || (connectionMethod === "privatekey" && (!formData.privateKey || !formData.pinataApiKey))}
                   className="w-full bg-black hover:bg-gray-800 text-white disabled:opacity-50"
                 >
                   {isConnecting ? (
