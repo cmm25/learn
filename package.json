@@ -22,7 +22,6 @@
         "claim-revenue": "npx ts-node ./scripts/royalty/claimRevenue.ts",
         "create-spg-collection": "npx ts-node ./utils/functions/createSpgNftCollection.ts",
         "send-raw-transaction": "npx ts-node ./scripts/misc/sendRawTransaction.ts"
-
     },
     "dependencies": {
         "@hookform/resolvers": "^5.0.1",

@@ -12,7 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Progress } from "@/components/ui/progress"
 import { CheckCircle, XCircle, Wallet, Upload, Eye, BookOpen, AlertCircle, FileText } from "lucide-react"
 import { useStoryProtocol } from "@/hooks/useStoryProtocol"
-import { uploadAndRegisterIP, IPMetadata } from "@/utils/storyProtocolService"
+import { uploadAndRegisterIP, IPMetadata, LicenseOptions } from "@/utils/storyProtocolService"
 import { Address } from "viem"
 
 // Extend Window interface to include ethereum
@@ -36,6 +36,9 @@ interface FormData {
   title: string
   description: string
   creator: string
+  licenseType: string
+  commercialRevShare?: number
+  defaultMintingFee?: number
 }
 
 export default function MultiStepForm() {
@@ -49,6 +52,9 @@ export default function MultiStepForm() {
     title: "",
     description: "",
     creator: "",
+    licenseType: "non-commercial",
+    commercialRevShare: 10,
+    defaultMintingFee: 0,
   })
   const [uploadSuccess, setUploadSuccess] = useState<boolean | null>(null)
   const [uploadResult, setUploadResult] = useState<{
@@ -62,7 +68,7 @@ export default function MultiStepForm() {
   
   const { connect: connectStoryProtocol, account: storyAccount } = useStoryProtocol()
 
-  const totalSteps = 4
+  const totalSteps = connectionMethod === "privatekey" ? 5 : 4
   const progress = (currentStep / totalSteps) * 100
 
   const connectWallet = async () => {
@@ -179,6 +185,8 @@ export default function MultiStepForm() {
   }
 
   const handleSubmit = async () => {
+    // Move to the loading/result step first
+    setCurrentStep(connectionMethod === "privatekey" ? 5 : 4)
     setUploadSuccess(null) // Set to loading state
     setUploadResult(null)
     
@@ -194,12 +202,20 @@ export default function MultiStepForm() {
                   formData.file.type === "text/plain" ? "Text Document" : "Image"
         }
         
+        // Prepare license options
+        const licenseOptions: LicenseOptions = {
+          type: formData.licenseType as LicenseOptions['type'],
+          commercialRevShare: formData.commercialRevShare,
+          defaultMintingFee: formData.defaultMintingFee
+        }
+        
         // Upload and register IP
         const result = await uploadAndRegisterIP(
           formData.file,
           metadata,
           storyAccount.address as Address,
-          formData.pinataApiKey
+          formData.pinataApiKey,
+          licenseOptions
         )
         
         if (result.success) {
@@ -216,20 +232,25 @@ export default function MultiStepForm() {
         }
       } else {
         // Original demo behavior for MetaMask
-        setTimeout(() => {
-          const success = Math.random() > 0.3
-          setUploadSuccess(success)
-        }, 2000)
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        const success = Math.random() > 0.3
+        setUploadSuccess(success)
+        if (success) {
+          setUploadResult({
+            txHash: "0x1234...5678" // Mock transaction hash
+          })
+        } else {
+          setUploadResult({
+            error: "Network congestion detected"
+          })
+        }
       }
-      
-      setCurrentStep(4)
     } catch (error) {
       console.error("Error submitting:", error)
       setUploadSuccess(false)
       setUploadResult({
         error: error instanceof Error ? error.message : "Unknown error occurred"
       })
-      setCurrentStep(4)
     }
   }
 
@@ -256,6 +277,9 @@ export default function MultiStepForm() {
       title: "",
       description: "",
       creator: "",
+      licenseType: "non-commercial",
+      commercialRevShare: 10,
+      defaultMintingFee: 0,
     })
     setUploadSuccess(null)
     setUploadResult(null)
@@ -607,8 +631,181 @@ export default function MultiStepForm() {
             </div>
           )}
 
-          {/* Step 3: Review */}
-          {currentStep === 3 && (
+          {/* Step 3: License Terms (only for Story Protocol) */}
+          {currentStep === 3 && connectionMethod === "privatekey" && (
+            <div className="space-y-6">
+              <div className="text-center space-y-2">
+                <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center">
+                  <FileText className="h-8 w-8 text-gray-700" />
+                </div>
+                <h3 className="text-xl font-medium text-gray-900">Select License Terms</h3>
+                <p className="text-gray-500 text-sm max-w-md mx-auto">
+                  Choose how others can use and remix your intellectual property.
+                </p>
+              </div>
+
+              <div className="bg-gray-50 p-4 rounded-md border border-gray-100">
+                <h4 className="text-sm font-medium text-gray-700 mb-2">Learning Note:</h4>
+                <p className="text-xs text-gray-600">
+                  License terms are legally binding and enforced on-chain. Once registered, terms are immutable. Each unique combination gets an ID and can be reused.
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <Label className="text-gray-700 font-medium mb-3 block">
+                    Choose a PIL Flavor
+                  </Label>
+                  
+                  <div className="space-y-3">
+                    <label className="flex items-start space-x-3 p-4 border border-gray-200 rounded-md cursor-pointer hover:bg-gray-50 transition-colors">
+                      <input
+                        type="radio"
+                        name="licenseType"
+                        value="non-commercial"
+                        checked={formData.licenseType === "non-commercial"}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, licenseType: e.target.value }))}
+                        className="mt-1"
+                      />
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900">Non-Commercial Social Remixing</p>
+                        <p className="text-sm text-gray-600 mt-1">
+                          Others can remix and share your work for non-commercial purposes with attribution.
+                        </p>
+                      </div>
+                    </label>
+
+                    <label className="flex items-start space-x-3 p-4 border border-gray-200 rounded-md cursor-pointer hover:bg-gray-50 transition-colors">
+                      <input
+                        type="radio"
+                        name="licenseType"
+                        value="commercial-use"
+                        checked={formData.licenseType === "commercial-use"}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, licenseType: e.target.value }))}
+                        className="mt-1"
+                      />
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900">Commercial Use</p>
+                        <p className="text-sm text-gray-600 mt-1">
+                          Others can use your work commercially but cannot create derivatives.
+                        </p>
+                      </div>
+                    </label>
+
+                    <label className="flex items-start space-x-3 p-4 border border-gray-200 rounded-md cursor-pointer hover:bg-gray-50 transition-colors">
+                      <input
+                        type="radio"
+                        name="licenseType"
+                        value="commercial-remix"
+                        checked={formData.licenseType === "commercial-remix"}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, licenseType: e.target.value }))}
+                        className="mt-1"
+                      />
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900">Commercial Remix</p>
+                        <p className="text-sm text-gray-600 mt-1">
+                          Others can remix and use your work commercially with revenue sharing.
+                        </p>
+                      </div>
+                    </label>
+
+                    <label className="flex items-start space-x-3 p-4 border border-gray-200 rounded-md cursor-pointer hover:bg-gray-50 transition-colors">
+                      <input
+                        type="radio"
+                        name="licenseType"
+                        value="cc-attribution"
+                        checked={formData.licenseType === "cc-attribution"}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, licenseType: e.target.value }))}
+                        className="mt-1"
+                      />
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900">Creative Commons Attribution</p>
+                        <p className="text-sm text-gray-600 mt-1">
+                          Most permissive - others can use, remix, and commercialize with attribution only.
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Commercial Remix Additional Options */}
+                {formData.licenseType === "commercial-remix" && (
+                  <div className="space-y-4 p-4 bg-gray-50 rounded-md border border-gray-100">
+                    <div>
+                      <Label htmlFor="revShare" className="text-gray-700 font-medium">
+                        Revenue Share Percentage
+                      </Label>
+                      <Input
+                        id="revShare"
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={formData.commercialRevShare}
+                        onChange={(e) => setFormData((prev) => ({ 
+                          ...prev, 
+                          commercialRevShare: parseInt(e.target.value) || 0 
+                        }))}
+                        className="mt-1 bg-white border-gray-200"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Percentage of revenue that derivative works must share with you (0-100%)
+                      </p>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="mintingFee" className="text-gray-700 font-medium">
+                        Default Minting Fee (in ETH)
+                      </Label>
+                      <Input
+                        id="mintingFee"
+                        type="number"
+                        min="0"
+                        step="0.001"
+                        value={formData.defaultMintingFee}
+                        onChange={(e) => setFormData((prev) => ({ 
+                          ...prev, 
+                          defaultMintingFee: parseFloat(e.target.value) || 0 
+                        }))}
+                        className="mt-1 bg-white border-gray-200"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Fee required to mint derivatives of your work
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="p-4 bg-blue-50 rounded-md border border-blue-200">
+                  <h4 className="text-sm font-medium text-blue-800 mb-2">Key Points:</h4>
+                  <ul className="text-xs text-blue-700 space-y-1 list-disc list-inside">
+                    <li>Terms are legally binding and enforced on-chain</li>
+                    <li>Once registered, terms cannot be changed</li>
+                    <li>You can negotiate terms with requesters before granting licenses</li>
+                    <li>Terms can be disputed through the Dispute Module if needed</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="flex space-x-4">
+                <Button
+                  onClick={prevStep}
+                  variant="outline"
+                  className="flex-1 border-gray-200 text-gray-700 hover:bg-gray-50"
+                >
+                  Back
+                </Button>
+                <Button
+                  onClick={nextStep}
+                  className="flex-1 bg-black hover:bg-gray-800 text-white"
+                >
+                  Continue
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 4: Review */}
+          {currentStep === (connectionMethod === "privatekey" ? 4 : 3) && (
             <div className="space-y-6">
               <div className="text-center space-y-2">
                 <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center">
@@ -677,6 +874,18 @@ export default function MultiStepForm() {
                   <Label className="text-gray-700 font-medium">Description</Label>
                   <p className="text-gray-600 mt-1">{formData.description}</p>
                 </div>
+
+                {connectionMethod === "privatekey" && (
+                  <div className="p-3 bg-white rounded-md border border-gray-200">
+                    <Label className="text-gray-700 font-medium">License Terms</Label>
+                    <p className="text-gray-600 mt-1">
+                      {formData.licenseType === "non-commercial" && "Non-Commercial Social Remixing"}
+                      {formData.licenseType === "commercial-use" && "Commercial Use"}
+                      {formData.licenseType === "commercial-remix" && `Commercial Remix (${formData.commercialRevShare}% revenue share, ${formData.defaultMintingFee} ETH minting fee)`}
+                      {formData.licenseType === "cc-attribution" && "Creative Commons Attribution"}
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="flex space-x-4">
@@ -694,8 +903,8 @@ export default function MultiStepForm() {
             </div>
           )}
 
-          {/* Step 4: Success/Failure */}
-          {currentStep === 4 && (
+          {/* Step 5: Success/Failure */}
+          {currentStep === (connectionMethod === "privatekey" ? 5 : 4) && (
             <div className="text-center space-y-6">
               {uploadSuccess === null ? (
                 <div className="space-y-4">
@@ -723,6 +932,20 @@ export default function MultiStepForm() {
                         : "The transaction hash is a unique identifier for your transaction on the blockchain. You can use it to track your transaction on a blockchain explorer."}
                     </p>
                   </div>
+
+                  {connectionMethod === "privatekey" && (
+                    <div className="p-3 bg-white border border-gray-200 rounded-md">
+                      <p className="text-gray-700 text-sm">
+                        <span className="font-medium">License Type:</span>{" "}
+                        <span className="font-mono">
+                          {formData.licenseType === "non-commercial" && "Non-Commercial Social Remixing"}
+                          {formData.licenseType === "commercial-use" && "Commercial Use"}
+                          {formData.licenseType === "commercial-remix" && `Commercial Remix (${formData.commercialRevShare}% revenue share)`}
+                          {formData.licenseType === "cc-attribution" && "Creative Commons Attribution"}
+                        </span>
+                      </p>
+                    </div>
+                  )}
 
                   {connectionMethod === "privatekey" && uploadResult ? (
                     <>
@@ -770,11 +993,13 @@ export default function MultiStepForm() {
                     </p>
                   </div>
 
-                  <div className="p-3 bg-white border border-gray-200 rounded-md">
-                    <p className="text-gray-700 text-sm">
-                      Error: {uploadResult?.error || "Network congestion detected"}
-                    </p>
-                  </div>
+                  {uploadResult?.error && (
+                    <div className="p-3 bg-white border border-gray-200 rounded-md">
+                      <p className="text-gray-700 text-sm">
+                        <span className="font-medium">Error:</span> {uploadResult.error}
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 

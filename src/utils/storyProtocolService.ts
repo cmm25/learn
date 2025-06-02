@@ -2,8 +2,8 @@
 
 import { getStoryClient } from './browserConfig'
 import { uploadFileToIPFS, uploadJSONToIPFS } from './functions/uploadIPFS'
-import { SPGNFTContractAddress, NonCommercialSocialRemixingTermsId } from './utils'
-import { Address, keccak256, toHex } from 'viem'
+import { SPGNFTContractAddress, NonCommercialSocialRemixingTermsId, createCommercialRemixTerms } from './utils'
+import { Address, keccak256, toHex, zeroAddress } from 'viem'
 
 export interface IPMetadata {
     title: string
@@ -25,6 +25,12 @@ export interface RegisterIPResult {
     error?: string
 }
 
+export interface LicenseOptions {
+    type: 'non-commercial' | 'commercial-use' | 'commercial-remix' | 'cc-attribution'
+    commercialRevShare?: number
+    defaultMintingFee?: number
+}
+
 /**
  * Upload content and register as IP with Story Protocol
  * @param file - The file to upload (text or PDF)
@@ -36,7 +42,8 @@ export async function uploadAndRegisterIP(
     file: File,
     metadata: IPMetadata,
     recipientAddress: Address,
-    pinataApiKey?: string
+    pinataApiKey?: string,
+    licenseOptions?: LicenseOptions
 ): Promise<RegisterIPResult> {
     try {
         const client = getStoryClient()
@@ -61,7 +68,6 @@ export async function uploadAndRegisterIP(
         const metadataUrl = `https://gateway.pinata.cloud/ipfs/${metadataHash}`
         
         // Convert IPFS hash to bytes32 format
-        // Story Protocol expects a 32-byte hex string, so we'll use keccak256 to hash the CID
         const metadataHashBytes32 = keccak256(toHex(metadataHash))
         
         // Step 3: Mint and register IP using SPG
@@ -94,12 +100,81 @@ export async function uploadAndRegisterIP(
         
         console.log('IP minted and registered:', mintResult)
         
+        // Determine license terms based on options
+        let licenseTermsId: string | bigint = NonCommercialSocialRemixingTermsId
+        let licenseTerms = null
+        
+        if (licenseOptions) {
+            switch (licenseOptions.type) {
+                case 'non-commercial':
+                    licenseTermsId = NonCommercialSocialRemixingTermsId
+                    break
+                case 'commercial-use':
+                    // Register Commercial Use PIL terms
+                    const commercialUseResult = await client.license.registerCommercialUsePIL({
+                        defaultMintingFee: licenseOptions.defaultMintingFee || 0,
+                        currency: zeroAddress, // Using native token
+                        txOptions: {
+                            waitForTransaction: true
+                        }
+                    })
+                    licenseTermsId = commercialUseResult.licenseTermsId || '2'
+                    console.log('Commercial Use license terms registered:', licenseTermsId)
+                    break
+                case 'commercial-remix':
+                    // For commercial remix, we need to register custom terms
+                    licenseTerms = createCommercialRemixTerms({
+                        commercialRevShare: licenseOptions.commercialRevShare || 10,
+                        defaultMintingFee: licenseOptions.defaultMintingFee || 0
+                    })
+                    // Register the custom license terms
+                    const registerResult = await client.license.registerPILTerms({
+                        ...licenseTerms,
+                        txOptions: {
+                            waitForTransaction: true
+                        }
+                    })
+                    licenseTermsId = registerResult.licenseTermsId || '3'
+                    console.log('Custom license terms registered:', licenseTermsId)
+                    break
+                case 'cc-attribution':
+                    const ccTerms = {
+                        transferable: true,
+                        royaltyPolicy: zeroAddress,
+                        defaultMintingFee: 0n,
+                        expiration: 0n,
+                        commercialUse: true,
+                        commercialAttribution: true,
+                        commercializerChecker: zeroAddress,
+                        commercializerCheckerData: '0x' as `0x${string}`,
+                        commercialRevShare: 0,
+                        commercialRevCeiling: 0n,
+                        derivativesAllowed: true,
+                        derivativesAttribution: true,
+                        derivativesApproval: false,
+                        derivativesReciprocal: true,
+                        derivativeRevCeiling: 0n,
+                        currency: zeroAddress,
+                        uri: ''
+                    }
+                    const ccResult = await client.license.registerPILTerms({
+                        ...ccTerms,
+                        txOptions: {
+                            waitForTransaction: true
+                        }
+                    })
+                    licenseTermsId = ccResult.licenseTermsId || '4'
+                    console.log('CC Attribution license terms registered:', licenseTermsId)
+                    break
+            }
+        }
+        
         // Then attach license terms separately
         let licenseResult
         try {
             licenseResult = await client.license.attachLicenseTerms({
                 ipId: mintResult.ipId as Address,
-                licenseTermsId: NonCommercialSocialRemixingTermsId,
+                licenseTermsId: licenseTermsId,
                 txOptions: {
                     waitForTransaction: true
                 }
@@ -120,7 +195,7 @@ export async function uploadAndRegisterIP(
         
         const result = {
             ...mintResult,
-            licenseTermsId: BigInt(NonCommercialSocialRemixingTermsId)
+            licenseTermsId: typeof licenseTermsId === 'string' ? BigInt(licenseTermsId) : licenseTermsId
         }
         
         console.log('IP registered successfully:', result)
