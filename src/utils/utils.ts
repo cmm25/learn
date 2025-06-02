@@ -35,6 +35,7 @@ export const NonCommercialSocialRemixingTerms: LicenseTerms = {
 // Docs: https://docs.story.foundation/developers/deployed-smart-contracts
 export const RoyaltyPolicyLAP: Address = '0xBe54FB168b3c982b7AaE60dB6CF75Bd8447b390E'
 export const RoyaltyPolicyLRP: Address = '0x9156e603C949481883B1d3355c6f1132D191fC41'
+export const PILTemplateAddress: Address = '0x0f1d85405047bc8c49fd56b47e277ae5704aaf3d' // PIL Template for Aeneid
 
 // This is a pre-configured PIL Flavor:
 // https://docs.story.foundation/concepts/programmable-ip-license/pil-flavors#flavor-%233%3A-commercial-remix

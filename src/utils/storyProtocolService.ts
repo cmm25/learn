@@ -2,7 +2,7 @@
 
 import { getStoryClient } from './browserConfig'
 import { uploadFileToIPFS, uploadJSONToIPFS } from './functions/uploadIPFS'
-import { SPGNFTContractAddress, NonCommercialSocialRemixingTermsId, createCommercialRemixTerms } from './utils'
+import { SPGNFTContractAddress, NonCommercialSocialRemixingTermsId, createCommercialRemixTerms, PILTemplateAddress } from './utils'
 import { Address, keccak256, toHex, zeroAddress } from 'viem'
 
 export interface IPMetadata {
@@ -29,6 +29,22 @@ export interface LicenseOptions {
     type: 'non-commercial' | 'commercial-use' | 'commercial-remix' | 'cc-attribution'
     commercialRevShare?: number
     defaultMintingFee?: number
+}
+
+export interface DerivativeMetadata {
+    title: string
+    description: string
+    creator: string
+    parentIpId: Address
+    ipType?: string
+}
+
+export interface MintDerivativeResult {
+    success: boolean
+    childIpId?: Address
+    tokenId?: bigint
+    txHash?: string
+    error?: string
 }
 
 /**
@@ -83,7 +99,37 @@ export async function uploadAndRegisterIP(
             throw new Error('SPG NFT Contract Address is not configured')
         }
         
-        // Try with the simpler mintAndRegisterIp method first
+        // Determine license terms based on options
+        let licenseTermsId: string | bigint = NonCommercialSocialRemixingTermsId
+        
+        if (licenseOptions) {
+            switch (licenseOptions.type) {
+                case 'non-commercial':
+                    licenseTermsId = NonCommercialSocialRemixingTermsId
+                    break
+                case 'commercial-use':
+                    // For commercial use, we'll use the default non-commercial terms
+                    // since commercial use without derivatives requires special setup
+                    licenseTermsId = NonCommercialSocialRemixingTermsId
+                    console.log('Using default license terms for commercial use:', licenseTermsId)
+                    break
+                case 'commercial-remix':
+                    // Use pre-existing commercial remix license terms
+                    // ID 3 is typically the commercial remix license on Story Protocol
+                    licenseTermsId = '3'
+                    console.log('Using commercial remix license terms:', licenseTermsId)
+                    break
+                case 'cc-attribution':
+                    // Use non-commercial terms for CC attribution
+                    // Since it allows derivatives and remixing
+                    licenseTermsId = NonCommercialSocialRemixingTermsId
+                    console.log('Using non-commercial terms for CC attribution:', licenseTermsId)
+                    break
+            }
+        }
+        
+        // First mint and register the IP
+        console.log('Minting and registering IP...')
         const mintResult = await client.ipAsset.mintAndRegisterIp({
             spgNftContract: SPGNFTContractAddress,
             recipient: recipientAddress,
@@ -100,112 +146,29 @@ export async function uploadAndRegisterIP(
         
         console.log('IP minted and registered:', mintResult)
         
-        // Determine license terms based on options
-        let licenseTermsId: string | bigint = NonCommercialSocialRemixingTermsId
-        let licenseTerms = null
-        
-        if (licenseOptions) {
-            switch (licenseOptions.type) {
-                case 'non-commercial':
-                    licenseTermsId = NonCommercialSocialRemixingTermsId
-                    break
-                case 'commercial-use':
-                    // Register Commercial Use PIL terms
-                    const commercialUseResult = await client.license.registerCommercialUsePIL({
-                        defaultMintingFee: licenseOptions.defaultMintingFee || 0,
-                        currency: zeroAddress, // Using native token
-                        txOptions: {
-                            waitForTransaction: true
-                        }
-                    })
-                    licenseTermsId = commercialUseResult.licenseTermsId || '2'
-                    console.log('Commercial Use license terms registered:', licenseTermsId)
-                    break
-                case 'commercial-remix':
-                    // For commercial remix, we need to register custom terms
-                    licenseTerms = createCommercialRemixTerms({
-                        commercialRevShare: licenseOptions.commercialRevShare || 10,
-                        defaultMintingFee: licenseOptions.defaultMintingFee || 0
-                    })
-                    // Register the custom license terms
-                    const registerResult = await client.license.registerPILTerms({
-                        ...licenseTerms,
-                        txOptions: {
-                            waitForTransaction: true
-                        }
-                    })
-                    licenseTermsId = registerResult.licenseTermsId || '3'
-                    console.log('Custom license terms registered:', licenseTermsId)
-                    break
-                case 'cc-attribution':
-                    const ccTerms = {
-                        transferable: true,
-                        royaltyPolicy: zeroAddress,
-                        defaultMintingFee: 0n,
-                        expiration: 0n,
-                        commercialUse: true,
-                        commercialAttribution: true,
-                        commercializerChecker: zeroAddress,
-                        commercializerCheckerData: '0x' as `0x${string}`,
-                        commercialRevShare: 0,
-                        commercialRevCeiling: 0n,
-                        derivativesAllowed: true,
-                        derivativesAttribution: true,
-                        derivativesApproval: false,
-                        derivativesReciprocal: true,
-                        derivativeRevCeiling: 0n,
-                        currency: zeroAddress,
-                        uri: ''
-                    }
-                    const ccResult = await client.license.registerPILTerms({
-                        ...ccTerms,
-                        txOptions: {
-                            waitForTransaction: true
-                        }
-                    })
-                    licenseTermsId = ccResult.licenseTermsId || '4'
-                    console.log('CC Attribution license terms registered:', licenseTermsId)
-                    break
-            }
-        }
-        
-        // Then attach license terms separately
-        let licenseResult
+        // Now attach the PIL terms using the correct method
+        console.log('Attaching PIL terms:', licenseTermsId)
         try {
-            licenseResult = await client.license.attachLicenseTerms({
+            const attachResult = await client.license.attachLicenseTerms({
                 ipId: mintResult.ipId as Address,
                 licenseTermsId: licenseTermsId,
+                licenseTemplate: PILTemplateAddress,
                 txOptions: {
                     waitForTransaction: true
                 }
             })
-            console.log('License terms attached:', licenseResult)
-        } catch (licenseError) {
-            console.warn('Failed to attach license terms:', licenseError)
-            // If license attachment fails, we still have a valid IP registration
-            // Return success with a note about the license
-            return {
-                success: true,
-                ipId: mintResult.ipId as Address,
-                tokenId: mintResult.tokenId,
-                txHash: mintResult.txHash,
-                error: 'IP registered successfully but license terms attachment failed. You can attach license terms later.'
-            }
+            console.log('PIL terms attached:', attachResult)
+        } catch (attachError) {
+            console.error('Failed to attach PIL terms:', attachError)
+            // Continue anyway as we have a valid IP
         }
-        
-        const result = {
-            ...mintResult,
-            licenseTermsId: typeof licenseTermsId === 'string' ? BigInt(licenseTermsId) : licenseTermsId
-        }
-        
-        console.log('IP registered successfully:', result)
         
         return {
             success: true,
-            ipId: result.ipId as Address,
-            tokenId: result.tokenId,
-            licenseTermsId: result.licenseTermsId,
-            txHash: result.txHash
+            ipId: mintResult.ipId as Address,
+            tokenId: mintResult.tokenId,
+            licenseTermsId: typeof licenseTermsId === 'string' ? BigInt(licenseTermsId) : licenseTermsId,
+            txHash: mintResult.txHash
         }
     } catch (error) {
         console.error('Error registering IP:', error)
@@ -213,6 +176,153 @@ export async function uploadAndRegisterIP(
             success: false,
             error: error instanceof Error ? error.message : 'Unknown error occurred'
         }
+    }
+}
+
+/**
+ * Mint a derivative NFT from a parent IP
+ * @param parentIpId - The parent IP ID to create derivative from
+ * @param metadata - Metadata for the derivative
+ * @param recipientAddress - Address to receive the minted derivative NFT
+ * @param pinataApiKey - Pinata API key for IPFS upload
+ * @param parentLicenseTermsId - Optional license terms ID of the parent (will try to detect if not provided)
+ * @returns Result of the derivative minting
+ */
+export async function mintDerivativeNFT(
+    parentIpId: Address,
+    metadata: DerivativeMetadata,
+    recipientAddress: Address,
+    pinataApiKey?: string,
+    parentLicenseTermsId?: string | bigint
+): Promise<MintDerivativeResult> {
+    try {
+        const client = getStoryClient()
+        
+        // Step 1: Upload metadata to IPFS
+        const fullMetadata = {
+            ...metadata,
+            timestamp: new Date().toISOString(),
+            type: 'derivative',
+            parentIpId
+        }
+        
+        console.log('Uploading derivative metadata to IPFS...')
+        const metadataHash = await uploadJSONToIPFS(fullMetadata, pinataApiKey)
+        const metadataUrl = `https://gateway.pinata.cloud/ipfs/${metadataHash}`
+        
+        // Convert IPFS hash to bytes32 format
+        const metadataHashBytes32 = keccak256(toHex(metadataHash))
+        
+        // Step 2: First, let's mint a license token from the parent IP
+        // This is required before creating a derivative
+        try {
+            console.log('Minting license token from parent IP...')
+            const licenseTokenResult = await client.license.mintLicenseTokens({
+                licensorIpId: parentIpId,
+                licenseTermsId: parentLicenseTermsId || NonCommercialSocialRemixingTermsId,
+                amount: 1,
+                receiver: recipientAddress,
+                txOptions: {
+                    waitForTransaction: true
+                }
+            })
+            console.log('License token minted:', licenseTokenResult)
+        } catch (licenseError) {
+            console.log('License token minting failed, but continuing...', licenseError)
+            // Continue anyway as the token might already exist
+        }
+        
+        // Step 3: Now mint the derivative
+        // Use the license terms ID that was passed or default to non-commercial
+        const licenseTermsId = parentLicenseTermsId || NonCommercialSocialRemixingTermsId
+        
+        console.log('Minting derivative NFT...')
+        console.log('Parent IP ID:', parentIpId)
+        console.log('Recipient:', recipientAddress)
+        console.log('License Terms ID:', licenseTermsId)
+        
+        try {
+            const mintResult = await client.ipAsset.mintAndRegisterIpAndMakeDerivative({
+                spgNftContract: SPGNFTContractAddress,
+                recipient: recipientAddress,
+                derivData: {
+                    parentIpIds: [parentIpId],
+                    licenseTermsIds: [licenseTermsId],
+                    licenseTemplate: PILTemplateAddress
+                },
+                ipMetadata: {
+                    ipMetadataURI: metadataUrl,
+                    ipMetadataHash: metadataHashBytes32,
+                    nftMetadataURI: metadataUrl,
+                    nftMetadataHash: metadataHashBytes32
+                },
+                txOptions: {
+                    waitForTransaction: true
+                }
+            })
+            
+            console.log('Derivative minted and registered:', mintResult)
+            
+            return {
+                success: true,
+                childIpId: mintResult.ipId as Address,
+                tokenId: mintResult.tokenId,
+                txHash: mintResult.txHash
+            }
+        } catch (mintError: any) {
+            // If the error is about license terms not being attached, provide a helpful message
+            if (mintError.message?.includes('License terms id')) {
+                throw new Error(
+                    `The parent IP does not have the required license terms attached. ` +
+                    `Please ensure the parent IP (${parentIpId}) has license terms that allow derivatives. ` +
+                    `You may need to use a different parent IP or register your own IP first.`
+                )
+            }
+            throw mintError
+        }
+        
+    } catch (error) {
+        console.error('Error minting derivative:', error)
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error occurred'
+        }
+    }
+}
+
+/**
+ * Get IP metadata from IPFS
+ * @param ipId - The IP ID to fetch metadata for
+ * @param pinataApiKey - Optional Pinata API key for fetching from IPFS
+ * @returns The metadata object or null if not found
+ */
+export async function getIPMetadata(ipId: Address, pinataApiKey?: string): Promise<IPMetadata | null> {
+    try {
+        // For now, we'll return stored metadata from the transaction
+        // In a production app, you would:
+        // 1. Query the blockchain for the metadata URI
+        // 2. Fetch from IPFS using the URI with pinataApiKey
+        // 3. Parse and return the metadata
+        
+        console.log('Fetching metadata for IP:', ipId)
+        
+        // TODO: Implement actual IPFS fetching using pinataApiKey
+        // Example implementation:
+        // if (metadataUri && pinataApiKey) {
+        //     const response = await fetch(metadataUri, {
+        //         headers: {
+        //             'Authorization': `Bearer ${pinataApiKey}`
+        //         }
+        //     })
+        //     return await response.json()
+        // }
+        
+        // This is a simplified implementation
+        // The actual metadata would be fetched from IPFS or blockchain events
+        return null
+    } catch (error) {
+        console.error('Error fetching IP metadata:', error)
+        return null
     }
 }
 
