@@ -4,6 +4,7 @@ import { useState, useCallback } from "react"
 import { WalletConnect } from "./WalletConnect"
 import { IPUpload } from "./IPUpload"
 import { IPDisplay } from "./IPDisplay"
+import { IPLineage } from "./IPLineage"
 import { DerivativeMint } from "./DerivativeMint"
 import { LoadingState } from "./LoadingState"
 import { ErrorDisplay } from "./ErrorDisplay"
@@ -21,9 +22,19 @@ type AppState =
   | "wallet-connect"
   | "ip-upload"
   | "ip-display"
+  | "ip-lineage"
   | "derivative-mint"
   | "loading"
   | "error"
+
+interface DerivativeIP {
+  ipId: Address
+  metadata: IPMetadata
+  licenseType: string
+  licenseTermsId?: string | bigint
+  txHash?: string
+  createdAt?: string
+}
 
 interface AppData {
   walletAddress?: string
@@ -33,6 +44,8 @@ interface AppData {
   metadata?: IPMetadata
   licenseType?: string
   licenseTermsId?: string | bigint
+  derivatives?: DerivativeIP[]
+  parentIpId?: Address
   error?: string
   loadingTitle?: string
   loadingDescription?: string
@@ -40,7 +53,7 @@ interface AppData {
 
 export function StoryProtocolApp() {
   const [appState, setAppState] = useState<AppState>("wallet-connect")
-  const [appData, setAppData] = useState<AppData>({})
+  const [appData, setAppData] = useState<AppData>({ derivatives: [] })
 
   const handleWalletConnect = useCallback((walletAddress: string, pinataApiKey: string) => {
     setAppData({ walletAddress, pinataApiKey })
@@ -107,16 +120,25 @@ export function StoryProtocolApp() {
 
     if (result.success && result.childIpId) {
       // Fetch the metadata to display
-      const ipMetadata = await getIPMetadata(result.childIpId, appData.pinataApiKey)
+      const ipMetadata = await getIPMetadata(result.childIpId)
       
+      // Create the new derivative
+      const newDerivative: DerivativeIP = {
+        ipId: result.childIpId,
+        metadata: ipMetadata || { ...metadata, ipType: metadata.ipType || "Derivative" },
+        licenseType: "derivative",
+        licenseTermsId: appData.licenseTermsId,
+        txHash: result.txHash,
+        createdAt: new Date().toISOString()
+      }
+
+      // Add to derivatives list and show lineage view
       setAppData(prev => ({
         ...prev,
-        ipId: result.childIpId,
-        txHash: result.txHash,
-        metadata: ipMetadata || { ...metadata, ipType: metadata.ipType || "Derivative" },
-        licenseType: "derivative"
+        derivatives: [...(prev.derivatives || []), newDerivative],
+        parentIpId: parentIpId
       }))
-      setAppState("ip-display")
+      setAppState("ip-lineage")
     } else {
       setAppData(prev => ({
         ...prev,
@@ -124,6 +146,22 @@ export function StoryProtocolApp() {
       }))
       setAppState("error")
     }
+  }
+
+  const handleSelectDerivative = (derivative: DerivativeIP) => {
+    setAppData(prev => ({
+      ...prev,
+      ipId: derivative.ipId,
+      txHash: derivative.txHash,
+      metadata: derivative.metadata,
+      licenseType: derivative.licenseType,
+      licenseTermsId: derivative.licenseTermsId
+    }))
+    setAppState("ip-display")
+  }
+
+  const handleViewLineage = () => {
+    setAppState("ip-lineage")
   }
 
   const handleReset = () => {
@@ -137,6 +175,14 @@ export function StoryProtocolApp() {
         setAppState("wallet-connect")
         break
       case "derivative-mint":
+        // Go back to lineage if we have derivatives, otherwise to display
+        if (appData.derivatives && appData.derivatives.length > 0) {
+          setAppState("ip-lineage")
+        } else {
+          setAppState("ip-display")
+        }
+        break
+      case "ip-lineage":
         setAppState("ip-display")
         break
       default:
@@ -168,6 +214,23 @@ export function StoryProtocolApp() {
             licenseType={appData.licenseType || "non-commercial"}
             licenseTermsId={appData.licenseTermsId}
             onMintDerivative={() => setAppState("derivative-mint")}
+            onViewLineage={appData.derivatives && appData.derivatives.length > 0 ? handleViewLineage : undefined}
+            onReset={handleReset}
+          />
+        )}
+
+        {appState === "ip-lineage" && appData.ipId && appData.metadata && (
+          <IPLineage
+            parentIp={{
+              ipId: appData.parentIpId || appData.ipId,
+              metadata: appData.metadata,
+              licenseType: appData.licenseType || "non-commercial",
+              licenseTermsId: appData.licenseTermsId,
+              txHash: appData.txHash
+            }}
+            derivatives={appData.derivatives || []}
+            onMintDerivative={() => setAppState("derivative-mint")}
+            onSelectDerivative={handleSelectDerivative}
             onReset={handleReset}
           />
         )}

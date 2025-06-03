@@ -20,6 +20,7 @@ interface IPDisplayProps {
   licenseType: string
   licenseTermsId?: string | bigint
   onMintDerivative: () => void
+  onViewLineage?: () => void
   onReset: () => void
 }
 
@@ -29,7 +30,8 @@ export function IPDisplay({
   metadata, 
   licenseType,
   licenseTermsId,
-  onMintDerivative, 
+  onMintDerivative,
+  onViewLineage,
   onReset 
 }: IPDisplayProps) {
   const [copied, setCopied] = useState(false)
@@ -166,7 +168,7 @@ export function IPDisplay({
           </ul>
         </div>
 
-        <div className="flex space-x-4">
+        <div className="flex space-x-3">
           <Button
             onClick={onMintDerivative}
             variant="outline"
@@ -174,6 +176,15 @@ export function IPDisplay({
           >
             Mint Derivative
           </Button>
+          {onViewLineage && (
+            <Button
+              onClick={onViewLineage}
+              variant="outline"
+              className="flex-1 border-blue-200 text-blue-700 hover:bg-blue-50"
+            >
+              View Lineage
+            </Button>
+          )}
           <Button
             onClick={onReset}
             className="flex-1 bg-black hover:bg-gray-800 text-white"
