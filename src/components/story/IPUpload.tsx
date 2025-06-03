@@ -192,7 +192,7 @@ export function IPUpload({ onSubmit, onBack }: IPUploadProps) {
             Select how others can use and build upon your work
           </p>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <label className={`relative flex items-start p-4 border-2 rounded-lg cursor-pointer transition-all ${
               licenseType === "non-commercial" ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:border-gray-300"
             }`}>
@@ -274,33 +274,7 @@ export function IPUpload({ onSubmit, onBack }: IPUploadProps) {
               </div>
             </label>
 
-            <label className={`relative flex items-start p-4 border-2 rounded-lg cursor-pointer transition-all ${
-              licenseType === "cc-attribution" ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:border-gray-300"
-            }`}>
-              <input
-                type="radio"
-                name="licenseType"
-                value="cc-attribution"
-                checked={licenseType === "cc-attribution"}
-                onChange={(e) => setLicenseType(e.target.value as LicenseOptions['type'])}
-                className="sr-only"
-              />
-              <div className="flex-1">
-                <p className="font-semibold text-gray-900 flex items-center">
-                  Creative Commons
-                  {licenseType === "cc-attribution" && (
-                    <span className="ml-2 text-blue-600">✓</span>
-                  )}
-                </p>
-                <p className="text-xs text-gray-600 mt-1">
-                  Uses non-commercial terms with attribution
-                </p>
-                <p className="text-xs text-green-600 mt-1 font-medium">
-                  ✓ Most permissive for derivatives
-                </p>
-              </div>
-            </label>
-          </div>
+                      </div>
         </div>
 
         <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
